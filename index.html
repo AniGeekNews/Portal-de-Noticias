@@ -128,7 +128,7 @@
             overflow-x: auto;
             border-bottom: 1px solid var(--border);
         }
-        .filter-tag { font-family: var(--font-sans); font-size: 13px; font-weight: 600; color: var(--text-muted); cursor: pointer; background: none; border: none; }
+        .filter-tag { font-family: var(--font-sans); font-size: 13px; font-weight: 600; color: var(--text-muted); cursor: pointer; background: none; border: none; padding-bottom: 5px;}
         .filter-tag.active { color: var(--text-main); text-decoration: underline; text-underline-offset: 4px; }
 
         .hero { max-width: var(--container-w); margin: 40px auto; padding: 0 20px; border-bottom: 1px solid var(--border); padding-bottom: 40px; min-height: 300px; }
@@ -193,7 +193,7 @@
     <main id="dynamic-content">
         <section class="hero">
             <div id="conteudo_de_destaque">
-                <p style="text-align: center; padding-top: 100px; color: var(--text-muted);">Carregando destaques...</p>
+                <p style="text-align: center; padding-top: 100px; color: var(--text-muted);">Iniciando portal...</p>
             </div>
         </section>
 
@@ -235,6 +235,7 @@
     <script src="./ads-manager.js" defer></script>
 
     <script>
+        // Funções de Interface
         function toggleMobileMenu() { document.getElementById('mobileMenu').classList.toggle('active'); }
         function scrollToTop() { window.scrollTo({ top: 0, behavior: 'smooth' }); }
 
@@ -251,36 +252,75 @@
             const winScroll = window.pageYOffset;
             const height = document.documentElement.scrollHeight - document.documentElement.clientHeight;
             const scrolled = (winScroll / height) * 100;
-            document.getElementById("progress-bar").style.width = scrolled + "%";
-            document.querySelector('.back-to-top').style.opacity = winScroll > 300 ? "1" : "0";
+            const bar = document.getElementById("progress-bar");
+            if(bar) bar.style.width = scrolled + "%";
+            const btt = document.querySelector('.back-to-top');
+            if(btt) btt.style.opacity = winScroll > 300 ? "1" : "0";
         });
     </script>
 
     <script type="module">
-        // PROTEÇÃO: Só tenta carregar se as pastas existirem
-        async function loadComponent(id, path, isScript = false) {
+        // Lógica de Carregamento de Módulos de Seções
+        const displayPrincipal = document.getElementById('conteudo_de_destaque');
+
+        async function carregarModuloSecao(nomeSecao) {
+            if (!displayPrincipal) return;
+            
+            displayPrincipal.innerHTML = '<p style="text-align: center; padding: 50px;">Carregando...</p>';
+            
             try {
-                const res = await fetch(path);
-                if (!res.ok) throw new Error();
-                const text = await res.text();
-                if(!isScript) document.getElementById(id).innerHTML = text;
-                return true;
-            } catch (e) {
-                console.warn(`Aguardando criação do componente: ${path}`);
-                return false;
+                // Tenta buscar o arquivo dentro da pasta /secoes/
+                const caminho = `./secoes/${nomeSecao}.html`;
+                const response = await fetch(caminho);
+                
+                if (!response.ok) throw new Error("Módulo não encontrado");
+                
+                const html = await response.text();
+                displayPrincipal.innerHTML = html;
+
+                // Executa scripts que porventura existam dentro do módulo carregado
+                const scripts = displayPrincipal.querySelectorAll("script");
+                scripts.forEach(oldScript => {
+                    const newScript = document.createElement("script");
+                    Array.from(oldScript.attributes).forEach(attr => newScript.setAttribute(attr.name, attr.value));
+                    newScript.appendChild(document.createTextNode(oldScript.innerHTML));
+                    oldScript.parentNode.replaceChild(newScript, oldScript);
+                });
+
+            } catch (error) {
+                console.error("Erro ao carregar seção:", error);
+                displayPrincipal.innerHTML = `<p style="text-align: center; padding: 50px; color: var(--accent-news);">Erro: O módulo de ${nomeSecao} ainda não foi publicado.</p>`;
             }
         }
 
+        // Evento para os botões do filtro (Abas)
+        document.querySelectorAll('.filter-tag').forEach(tag => {
+            tag.addEventListener('click', () => {
+                // UI: Troca a classe ativa
+                document.querySelectorAll('.filter-tag').forEach(t => t.classList.remove('active'));
+                tag.classList.add('active');
+
+                // Lógica: Carrega o arquivo correspondente
+                const secao = tag.getAttribute('data-section');
+                carregarModuloSecao(secao);
+            });
+        });
+
+        // Carregamento Inicial
         window.addEventListener('DOMContentLoaded', async () => {
-            // Tenta carregar os módulos básicos (Não quebrará o site se não existirem ainda)
-            loadComponent('search-container', './motor_de_pesquisa/barra_de_pesquisa.html');
-            loadComponent('conteudo_de_destaque', './modulos/conteudo_de_destaque.html');
-            
-            // Importação do Perfil (Novo Repositório)
+            // 1. Carrega Manchetes por padrão
+            carregarModuloSecao('manchetes');
+
+            // 2. Carrega componentes globais (se existirem)
+            try {
+                const searchRes = await fetch('./motor_de_pesquisa/barra_de_pesquisa.html');
+                if (searchRes.ok) document.getElementById('search-container').innerHTML = await searchRes.text();
+            } catch (e) { console.warn("Barra de pesquisa não encontrada."); }
+
             try {
                 const { carregarPerfilLateral } = await import('./usuario/perfil-lateral.js');
                 carregarPerfilLateral();
-            } catch (e) { console.log("Módulo de perfil ainda não criado."); }
+            } catch (e) { console.warn("Módulo de perfil lateral não encontrado."); }
         });
     </script>
 </body>
